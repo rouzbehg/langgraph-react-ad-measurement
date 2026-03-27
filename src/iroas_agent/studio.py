@@ -1,21 +1,36 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, TypedDict, Union
 
 from langgraph.graph import END, START, StateGraph
 
-from .agent import default_agent
-from .data import DEFAULT_DATASET_PATH, load_campaign_dataset
+from iroas_agent.agent import default_agent
+from iroas_agent.data import DEFAULT_DATASET_PATH, load_campaign_dataset
+from iroas_agent.prompting import load_react_prompt
+from iroas_agent.schemas import Campaign, FinalAnswer, StepRecord
+from iroas_agent.tracing import attach_run_metadata
 
 
 class StudioState(TypedDict, total=False):
     campaign_id: str
     dataset_path: str
+    campaign: Campaign
+    prompt_text: str
+    trajectory: List[StepRecord]
+    final_answer: FinalAnswer
+    step_count: int
+    max_steps: int
+    last_action: str
+    last_action_input: Union[Dict[str, Any], str]
+    last_thought: str
+    last_raw_text: str
+    last_observation: Dict[str, Any]
     selected_campaign: Dict[str, Any]
     prediction: Dict[str, Any]
-    trajectory: List[Dict[str, Any]]
     run_metadata: Dict[str, Any]
-    error: str
+
+
+_agent = default_agent()
 
 
 def _load_campaign(state: StudioState) -> StudioState:
@@ -41,34 +56,55 @@ def _load_campaign(state: StudioState) -> StudioState:
     return {
         **state,
         "campaign_id": campaign.observed.campaign_id,
+        "campaign": campaign,
         "selected_campaign": campaign.observed.to_agent_dict(),
+        "prompt_text": load_react_prompt(),
+        "trajectory": [],
+        "step_count": 0,
+        "max_steps": state.get("max_steps", 5),
     }
 
 
-def _run_agent(state: StudioState) -> StudioState:
-    dataset_path = state.get("dataset_path") or str(DEFAULT_DATASET_PATH)
-    campaigns = load_campaign_dataset(DEFAULT_DATASET_PATH.__class__(dataset_path))
-    target_id = state["campaign_id"]
+def _route_after_llm(state: StudioState) -> str:
+    if state["last_action"] == "finish":
+        return "finalize"
+    return "tool_step"
 
-    campaign = next((item for item in campaigns if item.observed.campaign_id == target_id), None)
-    if campaign is None:
-        raise ValueError(f"Campaign '{target_id}' was not found in {dataset_path}.")
 
-    agent = default_agent()
-    result = agent.run_campaign(campaign)
+def _finalize(state: StudioState) -> StudioState:
+    campaign = state["campaign"]
+    final_answer = state["final_answer"]
+    metadata = campaign.tracing_metadata()
+    run_metadata = {
+        **metadata,
+        "predicted_iROAS": round(final_answer.estimated_iroas, 4),
+        "number_of_steps": state["step_count"],
+    }
+    tags = [
+        final_answer.final_estimator_used,
+        metadata["data_availability_type"],
+        f"steps={state['step_count']}",
+    ]
+    attach_run_metadata(run_metadata, tags)
     return {
         **state,
-        "prediction": result["prediction"],
-        "trajectory": result["trajectory"],
-        "run_metadata": result["metadata"],
+        "prediction": final_answer.to_dict(),
+        "run_metadata": run_metadata,
     }
 
 
 _builder = StateGraph(StudioState)
 _builder.add_node("load_campaign", _load_campaign)
-_builder.add_node("run_agent", _run_agent)
+_builder.add_node("llm_step", _agent._llm_step)
+_builder.add_node("tool_step", _agent._tool_step)
+_builder.add_node("finalize", _finalize)
 _builder.add_edge(START, "load_campaign")
-_builder.add_edge("load_campaign", "run_agent")
-_builder.add_edge("run_agent", END)
+_builder.add_edge("load_campaign", "llm_step")
+_builder.add_conditional_edges(
+    "llm_step",
+    _route_after_llm,
+    {"tool_step": "tool_step", "finalize": "finalize"},
+)
+_builder.add_edge("tool_step", "llm_step")
+_builder.add_edge("finalize", END)
 studio_graph = _builder.compile()
-
