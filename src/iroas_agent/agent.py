@@ -63,6 +63,7 @@ class IROASReActAgent:
     def _build_graph(self):
         graph = StateGraph(AgentState)
         graph.add_node("llm_step", self._llm_step)
+        graph.add_node("review_observation", self._review_observation)
         for tool_name in TOOL_REGISTRY:
             graph.add_node(tool_name, self._make_tool_node(tool_name))
         graph.add_edge(START, "llm_step")
@@ -78,7 +79,8 @@ class IROASReActAgent:
             },
         )
         for tool_name in TOOL_REGISTRY:
-            graph.add_edge(tool_name, "llm_step")
+            graph.add_edge(tool_name, "review_observation")
+        graph.add_edge("review_observation", "llm_step")
         return graph.compile()
 
     def _route_after_llm(self, state: AgentState) -> str:
@@ -117,6 +119,7 @@ class IROASReActAgent:
         if parsed["action"] == "finish":
             final_answer = parsed.get("final_answer") or self._fallback_finish(state, "Model finished without final answer payload.")
             next_state["final_answer"] = final_answer
+            next_state["final_reasoning_summary"] = final_answer.explanation
             step: StepRecord = {
                 "thought": parsed["thought"],
                 "action": parsed["action"],
@@ -126,6 +129,22 @@ class IROASReActAgent:
             }
             next_state["trajectory"] = [*state.get("trajectory", []), step]
         return next_state
+
+    @traced(name="react_review_observation", run_type="chain")
+    def _review_observation(self, state: AgentState) -> AgentState:
+        tool_name = state.get("last_tool_name", state.get("last_action", "unknown"))
+        observation = state.get("last_tool_observation", state.get("last_observation", {}))
+        summary = self._summarize_observation(tool_name, observation)
+        evidence_entry = {
+            "tool": tool_name,
+            "summary": summary,
+            "observation": observation,
+        }
+        return {
+            **state,
+            "last_observation_summary": summary,
+            "evidence_log": [*state.get("evidence_log", []), evidence_entry],
+        }
 
     def _make_tool_node(self, tool_name: str) -> Callable[[AgentState], AgentState]:
         @traced(name=f"react::{tool_name}", run_type="chain")
@@ -146,11 +165,40 @@ class IROASReActAgent:
             }
             return {
                 **state,
+                "last_tool_name": tool_name,
                 "last_observation": observation,
+                "last_tool_observation": observation,
+                **self._tool_specific_state_update(tool_name, observation),
                 "trajectory": [*state.get("trajectory", []), step],
             }
 
         return _tool_node
+
+    def _tool_specific_state_update(self, tool_name: str, observation: Dict[str, Any]) -> Dict[str, Any]:
+        mapping = {
+            "diagnostics_tool": "last_diagnostics_result",
+            "rct_estimator_tool": "last_rct_result",
+            "geo_diff_in_diff_tool": "last_geo_result",
+            "observational_estimator_tool": "last_observational_result",
+        }
+        state_key = mapping.get(tool_name)
+        return {state_key: observation} if state_key else {}
+
+    def _summarize_observation(self, tool_name: str, observation: Dict[str, Any]) -> str:
+        if tool_name == "diagnostics_tool":
+            confidence = observation.get("confidence_indicators", {}).get("overall_confidence", "unknown")
+            data_types = observation.get("available_data_types", {})
+            available = [name for name, enabled in data_types.items() if enabled]
+            return f"Diagnostics found available data sources: {', '.join(available)} with overall confidence {confidence}."
+
+        est_inc = observation.get("estimated_incremental_conversions")
+        est_iroas = observation.get("estimated_iROAS")
+        diagnostics = observation.get("diagnostics", {})
+        profile = diagnostics.get("estimator_profile", "unknown_profile")
+        return (
+            f"{tool_name} estimated incremental conversions={est_inc}, "
+            f"estimated_iROAS={est_iroas}, profile={profile}."
+        )
 
     def _fallback_finish(self, state: AgentState, explanation_prefix: str) -> FinalAnswer:
         trajectory = state.get("trajectory", [])
@@ -177,8 +225,11 @@ class IROASReActAgent:
         metadata = campaign.tracing_metadata()
         initial_state: AgentState = {
             "campaign": campaign,
+            "selected_campaign": campaign.observed.to_agent_dict(),
+            "available_tools": [tool["name"] for tool in tool_descriptions()],
             "prompt_text": self.prompt_text,
             "trajectory": [],
+            "evidence_log": [],
             "step_count": 0,
             "max_steps": self.max_steps,
         }
@@ -211,6 +262,8 @@ class IROASReActAgent:
             "prediction": final_answer.to_dict(),
             "trajectory": result["trajectory"],
             "metadata": run_metadata,
+            "evidence_log": result.get("evidence_log", []),
+            "selected_campaign": result.get("selected_campaign"),
             "langsmith_extra": build_langsmith_extra(run_metadata, tags),
         }
 

@@ -15,8 +15,10 @@ class StudioState(TypedDict, total=False):
     campaign_id: str
     dataset_path: str
     campaign: Campaign
+    available_tools: List[str]
     prompt_text: str
     trajectory: List[StepRecord]
+    evidence_log: List[Dict[str, Any]]
     final_answer: FinalAnswer
     step_count: int
     max_steps: int
@@ -24,10 +26,18 @@ class StudioState(TypedDict, total=False):
     last_action_input: Union[Dict[str, Any], str]
     last_thought: str
     last_raw_text: str
+    last_tool_name: str
     last_observation: Dict[str, Any]
+    last_tool_observation: Dict[str, Any]
+    last_observation_summary: str
+    last_diagnostics_result: Dict[str, Any]
+    last_rct_result: Dict[str, Any]
+    last_geo_result: Dict[str, Any]
+    last_observational_result: Dict[str, Any]
     selected_campaign: Dict[str, Any]
     prediction: Dict[str, Any]
     run_metadata: Dict[str, Any]
+    final_reasoning_summary: str
 
 
 _agent = default_agent()
@@ -57,9 +67,16 @@ def _load_campaign(state: StudioState) -> StudioState:
         **state,
         "campaign_id": campaign.observed.campaign_id,
         "campaign": campaign,
+        "available_tools": [
+            "diagnostics_tool",
+            "rct_estimator_tool",
+            "geo_diff_in_diff_tool",
+            "observational_estimator_tool",
+        ],
         "selected_campaign": campaign.observed.to_agent_dict(),
         "prompt_text": load_react_prompt(),
         "trajectory": [],
+        "evidence_log": [],
         "step_count": 0,
         "max_steps": state.get("max_steps", 5),
     }
@@ -90,12 +107,14 @@ def _finalize(state: StudioState) -> StudioState:
         **state,
         "prediction": final_answer.to_dict(),
         "run_metadata": run_metadata,
+        "final_reasoning_summary": final_answer.explanation,
     }
 
 
 _builder = StateGraph(StudioState)
 _builder.add_node("load_campaign", _load_campaign)
 _builder.add_node("llm_step", _agent._llm_step)
+_builder.add_node("review_observation", _agent._review_observation)
 for tool_name in ("diagnostics_tool", "rct_estimator_tool", "geo_diff_in_diff_tool", "observational_estimator_tool"):
     _builder.add_node(tool_name, _agent._make_tool_node(tool_name))
 _builder.add_node("finalize", _finalize)
@@ -113,6 +132,7 @@ _builder.add_conditional_edges(
     },
 )
 for tool_name in ("diagnostics_tool", "rct_estimator_tool", "geo_diff_in_diff_tool", "observational_estimator_tool"):
-    _builder.add_edge(tool_name, "llm_step")
+    _builder.add_edge(tool_name, "review_observation")
+_builder.add_edge("review_observation", "llm_step")
 _builder.add_edge("finalize", END)
 studio_graph = _builder.compile()

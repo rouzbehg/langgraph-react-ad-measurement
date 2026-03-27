@@ -115,8 +115,11 @@ class StepRecord(TypedDict):
 
 class AgentState(TypedDict, total=False):
     campaign: Campaign
+    selected_campaign: Dict[str, Any]
+    available_tools: List[str]
     prompt_text: str
     trajectory: List[StepRecord]
+    evidence_log: List[Dict[str, Any]]
     final_answer: FinalAnswer
     step_count: int
     max_steps: int
@@ -124,4 +127,12 @@ class AgentState(TypedDict, total=False):
     last_action_input: Union[Dict[str, Any], str]
     last_thought: str
     last_raw_text: str
+    last_tool_name: str
     last_observation: Dict[str, Any]
+    last_tool_observation: Dict[str, Any]
+    last_observation_summary: str
+    last_diagnostics_result: Dict[str, Any]
+    last_rct_result: Dict[str, Any]
+    last_geo_result: Dict[str, Any]
+    last_observational_result: Dict[str, Any]
+    final_reasoning_summary: str
