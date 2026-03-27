@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .prompting import build_agent_prompt, load_react_prompt, parse_action_block
 from .schemas import AgentState, Campaign, FinalAnswer, StepRecord
@@ -63,20 +63,28 @@ class IROASReActAgent:
     def _build_graph(self):
         graph = StateGraph(AgentState)
         graph.add_node("llm_step", self._llm_step)
-        graph.add_node("tool_step", self._tool_step)
+        for tool_name in TOOL_REGISTRY:
+            graph.add_node(tool_name, self._make_tool_node(tool_name))
         graph.add_edge(START, "llm_step")
         graph.add_conditional_edges(
             "llm_step",
             self._route_after_llm,
-            {"tool_step": "tool_step", "finish": END},
+            {
+                "diagnostics_tool": "diagnostics_tool",
+                "rct_estimator_tool": "rct_estimator_tool",
+                "geo_diff_in_diff_tool": "geo_diff_in_diff_tool",
+                "observational_estimator_tool": "observational_estimator_tool",
+                "finish": END,
+            },
         )
-        graph.add_edge("tool_step", "llm_step")
+        for tool_name in TOOL_REGISTRY:
+            graph.add_edge(tool_name, "llm_step")
         return graph.compile()
 
     def _route_after_llm(self, state: AgentState) -> str:
         if state["last_action"] == "finish":
             return "finish"
-        return "tool_step"
+        return state["last_action"]
 
     @traced(name="react_llm_step", run_type="llm")
     def _llm_step(self, state: AgentState) -> AgentState:
@@ -119,29 +127,30 @@ class IROASReActAgent:
             next_state["trajectory"] = [*state.get("trajectory", []), step]
         return next_state
 
-    @traced(name="react_tool_step", run_type="chain")
-    def _tool_step(self, state: AgentState) -> AgentState:
-        tool_name = state["last_action"]
-        if tool_name not in TOOL_REGISTRY:
-            raise ValueError(f"Unknown tool requested: {tool_name}")
+    def _make_tool_node(self, tool_name: str) -> Callable[[AgentState], AgentState]:
+        @traced(name=f"react::{tool_name}", run_type="chain")
+        def _tool_node(state: AgentState) -> AgentState:
+            if tool_name not in TOOL_REGISTRY:
+                raise ValueError(f"Unknown tool requested: {tool_name}")
 
-        tool = TOOL_REGISTRY[tool_name]
-        raw_input = state.get("last_action_input", "none")
-        tool_input = {} if raw_input == "none" else raw_input
-        observation = tool(state["campaign"], tool_input)
+            raw_input = state.get("last_action_input", "none")
+            tool_input = {} if raw_input == "none" else raw_input
+            observation = TOOL_REGISTRY[tool_name](state["campaign"], tool_input)
 
-        step: StepRecord = {
-            "thought": state["last_thought"],
-            "action": tool_name,
-            "action_input": raw_input,
-            "observation": observation,
-            "raw_text": state["last_raw_text"],
-        }
-        return {
-            **state,
-            "last_observation": observation,
-            "trajectory": [*state.get("trajectory", []), step],
-        }
+            step: StepRecord = {
+                "thought": state["last_thought"],
+                "action": tool_name,
+                "action_input": raw_input,
+                "observation": observation,
+                "raw_text": state["last_raw_text"],
+            }
+            return {
+                **state,
+                "last_observation": observation,
+                "trajectory": [*state.get("trajectory", []), step],
+            }
+
+        return _tool_node
 
     def _fallback_finish(self, state: AgentState, explanation_prefix: str) -> FinalAnswer:
         trajectory = state.get("trajectory", [])

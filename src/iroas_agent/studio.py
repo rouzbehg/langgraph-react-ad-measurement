@@ -68,7 +68,7 @@ def _load_campaign(state: StudioState) -> StudioState:
 def _route_after_llm(state: StudioState) -> str:
     if state["last_action"] == "finish":
         return "finalize"
-    return "tool_step"
+    return state["last_action"]
 
 
 def _finalize(state: StudioState) -> StudioState:
@@ -96,15 +96,23 @@ def _finalize(state: StudioState) -> StudioState:
 _builder = StateGraph(StudioState)
 _builder.add_node("load_campaign", _load_campaign)
 _builder.add_node("llm_step", _agent._llm_step)
-_builder.add_node("tool_step", _agent._tool_step)
+for tool_name in ("diagnostics_tool", "rct_estimator_tool", "geo_diff_in_diff_tool", "observational_estimator_tool"):
+    _builder.add_node(tool_name, _agent._make_tool_node(tool_name))
 _builder.add_node("finalize", _finalize)
 _builder.add_edge(START, "load_campaign")
 _builder.add_edge("load_campaign", "llm_step")
 _builder.add_conditional_edges(
     "llm_step",
     _route_after_llm,
-    {"tool_step": "tool_step", "finalize": "finalize"},
+    {
+        "diagnostics_tool": "diagnostics_tool",
+        "rct_estimator_tool": "rct_estimator_tool",
+        "geo_diff_in_diff_tool": "geo_diff_in_diff_tool",
+        "observational_estimator_tool": "observational_estimator_tool",
+        "finalize": "finalize",
+    },
 )
-_builder.add_edge("tool_step", "llm_step")
+for tool_name in ("diagnostics_tool", "rct_estimator_tool", "geo_diff_in_diff_tool", "observational_estimator_tool"):
+    _builder.add_edge(tool_name, "llm_step")
 _builder.add_edge("finalize", END)
 studio_graph = _builder.compile()
