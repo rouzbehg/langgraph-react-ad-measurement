@@ -1,6 +1,7 @@
 .env
 .env.*
 .venv/
+.venv311/
 __pycache__/
 *.py[cod]
 .DS_Store

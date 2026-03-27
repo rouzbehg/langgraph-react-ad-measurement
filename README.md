@@ -47,14 +47,46 @@ python -m iroas_agent.materialize --count 100 --seed 7 --output data/synthetic_c
 python -m iroas_agent.runner --dataset-path data/synthetic_campaigns.csv --sample-size 3
 ```
 
+## LangSmith Studio
+
+This repository now includes a LangSmith Studio / LangGraph local server entrypoint via [langgraph.json](/Users/rouzbehgerami/Library/CloudStorage/GoogleDrive-rouzbehg@gmail.com/My%20Drive/Documents/Projects/LLMs/langgraph-react-ad-measurement/langgraph.json) and [studio.py](/Users/rouzbehgerami/Library/CloudStorage/GoogleDrive-rouzbehg@gmail.com/My%20Drive/Documents/Projects/LLMs/langgraph-react-ad-measurement/src/iroas_agent/studio.py).
+
+Official docs note that the LangGraph CLI local server requires Python 3.11+ for Studio usage. This project code has otherwise been developed in Python 3.9, so the cleanest Studio workflow is to use a Python 3.11+ environment for the local server.
+
+Typical setup:
+
+```bash
+pip install -U "langgraph-cli[inmem]"
+langgraph dev
+```
+
+With the server running, Studio should be available at a URL like:
+
+```text
+https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+```
+
+Studio input shape:
+
+```json
+{
+  "campaign_id": "campaign_0000",
+  "dataset_path": "data/synthetic_campaigns.csv"
+}
+```
+
+If `campaign_id` is omitted, the Studio graph will use the first campaign in the dataset.
+
 ## Project layout
 
 - `src/iroas_agent/data.py`: synthetic data generation
 - `src/iroas_agent/materialize.py`: dataset export utility
 - `src/iroas_agent/tools.py`: estimator and diagnostics tools
 - `src/iroas_agent/agent.py`: LangGraph ReAct agent
+- `src/iroas_agent/studio.py`: Studio-friendly graph entrypoint
 - `src/iroas_agent/evaluation.py`: metric computation and slicing
 - `src/iroas_agent/runner.py`: experiment runner
+- `langgraph.json`: LangGraph local server configuration
 - `prompts/react_agent_prompt.md`: versioned agent prompt
 - `notebooks/`: guided learning notebooks
 

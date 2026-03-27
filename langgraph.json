@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "iroas_studio": "./src/iroas_agent/studio.py:studio_graph"
+  },
+  "env": ".env"
+}

@@ -22,6 +22,7 @@ _load_project_env()
 from .agent import IROASReActAgent
 from .data import DEFAULT_DATASET_PATH, generate_campaigns, load_campaign_dataset, write_campaign_dataset
 from .runner import run_experiment
+from .studio import studio_graph
 
 __all__ = [
     "IROASReActAgent",
@@ -30,4 +31,5 @@ __all__ = [
     "load_campaign_dataset",
     "write_campaign_dataset",
     "run_experiment",
+    "studio_graph",
 ]
