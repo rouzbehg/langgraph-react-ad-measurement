@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "langgraph-react-ad-measurement"
+version = "0.1.0"
+description = "Educational LangGraph ReAct agent for estimating iROAS under partial data availability."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "langgraph>=0.2.40",
+  "langchain-core>=0.3.0",
+  "langchain-openai>=0.2.0",
+  "langsmith>=0.1.125",
+  "numpy>=1.26.0",
+  "pandas>=2.2.0",
+  "matplotlib>=3.8.0",
+  "jupyter>=1.0.0",
+  "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
