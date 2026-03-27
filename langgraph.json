@@ -1,7 +1,7 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "iroas_studio": "./src/iroas_agent/studio.py:studio_graph"
+    "iroas_studio": "iroas_agent.studio:studio_graph"
   },
   "env": ".env"
 }
