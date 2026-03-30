@@ -57,27 +57,75 @@ def _render_header() -> None:
     )
 
 
-def _sidebar_controls() -> tuple[Path, str, int, bool]:
+def _discover_artifacts() -> list[Path]:
+    candidates: list[Path] = []
+    for base_dir in [EXPERIMENT_OUTPUTS_DIR, Path("notebooks/data/experiment_outputs")]:
+        if base_dir.exists():
+            candidates.extend(sorted(base_dir.glob("*.json")))
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key not in seen:
+            deduped.append(path)
+            seen.add(key)
+    return deduped
+
+
+def _sidebar_controls() -> tuple[Path, str, int, bool, bool]:
     st.sidebar.header("Controls")
-    known_artifacts = list_experiment_outputs()
+    known_artifacts = _discover_artifacts() or list_experiment_outputs()
     default_artifact = known_artifacts[0] if known_artifacts else (EXPERIMENT_OUTPUTS_DIR / "latest.json")
 
     artifact_path = st.sidebar.text_input("Experiment artifact", value=str(default_artifact))
     dataset_path = st.sidebar.text_input("Dataset path", value="data/synthetic_campaigns.csv")
     sample_size = st.sidebar.slider("Sample trajectories", min_value=5, max_value=100, value=20, step=5)
     refresh_experiment = st.sidebar.checkbox("Refresh artifact by rerunning agent", value=False)
+    run_generation = st.sidebar.button("Generate / refresh artifact")
+
+    if known_artifacts:
+        st.sidebar.caption("Detected artifacts")
+        st.sidebar.code("\n".join(str(path) for path in known_artifacts), language="text")
 
     with st.sidebar.expander("Artifact Notes", expanded=False):
         st.markdown(
             "- The app prefers loading a saved experiment artifact.\n"
-            "- If the artifact is missing, or refresh is enabled, it will rerun the agent and save a fresh JSON file.\n"
+            "- The app will only rerun the agent when you click `Generate / refresh artifact`.\n"
+            "- If the artifact path exists, it loads immediately without rerunning.\n"
             "- `final_estimator_used` means the estimator whose numeric output matches the final predicted answer."
         )
 
-    return Path(artifact_path), dataset_path, sample_size, refresh_experiment
+    return Path(artifact_path), dataset_path, sample_size, refresh_experiment, run_generation
 
 
-def _load_output(artifact_path: Path, dataset_path: str, sample_size: int, refresh_experiment: bool) -> dict:
+@st.cache_data(show_spinner=False)
+def _load_existing_output_cached(artifact_path_str: str) -> dict:
+    from iroas_agent.dashboard import load_experiment_output
+
+    return load_experiment_output(Path(artifact_path_str))
+
+
+def _load_output(
+    artifact_path: Path,
+    dataset_path: str,
+    sample_size: int,
+    refresh_experiment: bool,
+    run_generation: bool,
+) -> dict:
+    if artifact_path.exists() and not refresh_experiment:
+        with st.spinner("Loading experiment artifact..."):
+            return _load_existing_output_cached(str(artifact_path))
+
+    if not run_generation:
+        if artifact_path.exists() and refresh_experiment:
+            st.info("Click `Generate / refresh artifact` in the sidebar to rerun the agent and overwrite this artifact.")
+        else:
+            st.warning(
+                "No artifact found at the selected path. Point the app to an existing artifact, or click "
+                "`Generate / refresh artifact` to create one."
+            )
+        st.stop()
+
     with st.spinner("Loading experiment artifact..."):
         return load_or_create_experiment_output(
             artifact_path,
@@ -196,8 +244,8 @@ def _render_run_detail(results: list[dict], frame: pd.DataFrame) -> None:
 
 def main() -> None:
     _render_header()
-    artifact_path, dataset_path, sample_size, refresh_experiment = _sidebar_controls()
-    output = _load_output(artifact_path, dataset_path, sample_size, refresh_experiment)
+    artifact_path, dataset_path, sample_size, refresh_experiment, run_generation = _sidebar_controls()
+    output = _load_output(artifact_path, dataset_path, sample_size, refresh_experiment, run_generation)
     results = output["results"]
     frame = results_frame(results)
 

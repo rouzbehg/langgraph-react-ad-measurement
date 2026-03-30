@@ -10,6 +10,7 @@ __pycache__/
 /data/*.csv
 /data/*.json
 /data/*.jsonl
+/data/experiment_outputs/*.json
 /notebooks/data/experiment_outputs/
 /dist/
 /build/
