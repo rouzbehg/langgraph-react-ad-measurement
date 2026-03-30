@@ -46,7 +46,11 @@ def results_frame(results: Iterable[Dict[str, Any]]) -> pd.DataFrame:
             "reported_final_estimator_used",
             result["prediction"]["final_estimator_used"],
         )
-        actual_final_estimator = estimator_actions[-1] if estimator_actions else result["prediction"]["final_estimator_used"]
+        matched_final_estimator = _match_estimator_from_prediction(trajectory, result["prediction"])
+        actual_final_estimator = (
+            matched_final_estimator
+            or (estimator_actions[-1] if estimator_actions else result["prediction"]["final_estimator_used"])
+        )
         step_count = metadata.get("number_of_steps", len(trajectory))
         rows.append(
             {
@@ -61,7 +65,9 @@ def results_frame(results: Iterable[Dict[str, Any]]) -> pd.DataFrame:
                 "final_estimator_used": actual_final_estimator,
                 "reported_final_estimator_used": reported_final_estimator,
                 "final_estimator_source": (
-                    result.get("final_estimator_source", "trajectory")
+                    result.get("final_estimator_source", "matched_prediction")
+                    if matched_final_estimator
+                    else result.get("final_estimator_source", "trajectory")
                     if estimator_actions
                     else result.get("final_estimator_source", "model_explanation")
                 ),
@@ -177,3 +183,23 @@ def _used_preferred_estimator(row: pd.Series) -> bool:
     if row["has_geo_experiment"]:
         return row["final_estimator_used"] == "geo_diff_in_diff_tool"
     return row["final_estimator_used"] == "observational_estimator_tool"
+
+
+def _match_estimator_from_prediction(trajectory: List[Dict[str, Any]], prediction: Dict[str, Any]) -> str | None:
+    pred_inc = prediction.get("estimated_incremental_conversions")
+    pred_iroas = prediction.get("estimated_iROAS")
+    if pred_inc is None or pred_iroas is None:
+        return None
+
+    for step in reversed(trajectory):
+        action = step.get("action")
+        observation = step.get("observation") or {}
+        if action not in {"rct_estimator_tool", "geo_diff_in_diff_tool", "observational_estimator_tool"}:
+            continue
+        obs_inc = observation.get("estimated_incremental_conversions")
+        obs_iroas = observation.get("estimated_iROAS")
+        if obs_inc is None or obs_iroas is None:
+            continue
+        if abs(float(obs_inc) - float(pred_inc)) <= 0.5 and abs(float(obs_iroas) - float(pred_iroas)) <= 0.01:
+            return str(action)
+    return None

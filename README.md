@@ -47,6 +47,31 @@ python -m iroas_agent.materialize --count 100 --seed 7 --output data/synthetic_c
 python -m iroas_agent.runner --dataset-path data/synthetic_campaigns.csv --sample-size 3
 ```
 
+7. Save a reusable experiment artifact for the notebook dashboard:
+
+```bash
+python -m iroas_agent.runner \
+  --dataset-path data/synthetic_campaigns.csv \
+  --sample-size 20 \
+  --output-path data/experiment_outputs/latest.json
+```
+
+## Data vs artifacts
+
+This project has two different output concepts:
+
+- `data/synthetic_campaigns.csv`
+  - a materialized synthetic dataset
+  - one row per campaign
+  - includes observed campaign fields plus hidden truth for evaluation
+- `data/experiment_outputs/latest.json`
+  - a saved experiment artifact
+  - includes full agent-run outputs such as summary metrics, per-campaign predictions, trajectories, and sample traces
+
+The notebook dashboard is designed to read experiment artifacts, not raw datasets. The raw dataset provides campaign inputs and ground truth; the experiment artifact provides agent behavior and evaluation outputs.
+
+You may also see notebook-local artifacts under `notebooks/data/experiment_outputs/` if a notebook was run from inside the `notebooks/` directory. Those are local convenience outputs and are ignored by Git.
+
 ## LangSmith Studio
 
 This repository now includes a LangSmith Studio / LangGraph local server entrypoint via [langgraph.json](/Users/rouzbehgerami/Library/CloudStorage/GoogleDrive-rouzbehg@gmail.com/My%20Drive/Documents/Projects/LLMs/langgraph-react-ad-measurement/langgraph.json) and [studio.py](/Users/rouzbehgerami/Library/CloudStorage/GoogleDrive-rouzbehg@gmail.com/My%20Drive/Documents/Projects/LLMs/langgraph-react-ad-measurement/src/iroas_agent/studio.py).
@@ -81,6 +106,7 @@ If `campaign_id` is omitted, the Studio graph will use the first campaign in the
 
 - `src/iroas_agent/data.py`: synthetic data generation
 - `src/iroas_agent/materialize.py`: dataset export utility
+- `src/iroas_agent/dashboard.py`: notebook dashboard helpers and artifact loading
 - `src/iroas_agent/tools.py`: estimator and diagnostics tools
 - `src/iroas_agent/agent.py`: LangGraph ReAct agent
 - `src/iroas_agent/studio.py`: Studio-friendly graph entrypoint
@@ -96,3 +122,4 @@ If `campaign_id` is omitted, the Studio graph will use the first campaign in the
 - Hidden truth fields exist only for evaluation and tracing metadata.
 - LangSmith is treated as the primary debugging interface when enabled.
 - Exported datasets in `data/` include both observed fields and hidden truth for learning and evaluation.
+- In the dashboard, `final_estimator_used` means the estimator whose numeric output matches the final predicted answer. This is different from `tool_sequence`, which records every estimator the agent called during comparison.

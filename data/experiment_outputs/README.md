@@ -24,3 +24,13 @@ The saved JSON artifact includes:
 - slice metrics
 - full per-campaign results
 - sample trajectories
+
+Important interpretation detail:
+
+- `tool_sequence` records every tool the agent called
+- `final_estimator_used` should mean the estimator whose numeric output matches the final predicted answer
+
+Those are not always the same thing. For example, the agent may call `rct_estimator_tool`, then compare with `observational_estimator_tool`, and still finish using the RCT estimate. In that case:
+
+- `tool_sequence` includes both estimators
+- `final_estimator_used` should still be `rct_estimator_tool`

@@ -227,6 +227,23 @@ class IROASReActAgent:
                 return action
         return None
 
+    def _matched_estimator_action(self, trajectory: List[StepRecord], final_answer: FinalAnswer) -> Optional[str]:
+        for step in reversed(trajectory):
+            action = step["action"]
+            observation = step.get("observation") or {}
+            if action not in TOOL_REGISTRY or action == "diagnostics_tool":
+                continue
+            obs_inc = observation.get("estimated_incremental_conversions")
+            obs_iroas = observation.get("estimated_iROAS")
+            if obs_inc is None or obs_iroas is None:
+                continue
+            if (
+                abs(float(obs_inc) - final_answer.estimated_incremental_conversions) <= 0.5
+                and abs(float(obs_iroas) - final_answer.estimated_iroas) <= 0.01
+            ):
+                return action
+        return None
+
     @traced(name="iroas_campaign_run", run_type="chain")
     def run_campaign(self, campaign: Campaign) -> Dict[str, Any]:
         metadata = campaign.tracing_metadata()
@@ -253,7 +270,8 @@ class IROASReActAgent:
             },
         )
         raw_final_answer = result["final_answer"]
-        actual_final_estimator = self._latest_estimator_action(result.get("trajectory", []))
+        matched_final_estimator = self._matched_estimator_action(result.get("trajectory", []), raw_final_answer)
+        actual_final_estimator = matched_final_estimator or self._latest_estimator_action(result.get("trajectory", []))
         final_answer = raw_final_answer
         if actual_final_estimator and raw_final_answer.final_estimator_used != actual_final_estimator:
             final_answer = FinalAnswer(
@@ -277,7 +295,13 @@ class IROASReActAgent:
             "campaign_id": campaign.observed.campaign_id,
             "prediction": final_answer.to_dict(),
             "reported_final_estimator_used": raw_final_answer.final_estimator_used,
-            "final_estimator_source": "trajectory" if actual_final_estimator else "model_explanation",
+            "final_estimator_source": (
+                "matched_prediction"
+                if matched_final_estimator
+                else "trajectory"
+                if actual_final_estimator
+                else "model_explanation"
+            ),
             "trajectory": result["trajectory"],
             "metadata": run_metadata,
             "evidence_log": result.get("evidence_log", []),
