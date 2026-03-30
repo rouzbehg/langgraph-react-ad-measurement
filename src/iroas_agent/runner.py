@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .agent import IROASReActAgent, default_agent
+from .dashboard import save_experiment_output
 from .data import DEFAULT_DATASET_PATH, generate_campaigns, load_campaign_dataset
 from .evaluation import compute_metrics, slice_metrics
 
@@ -50,6 +51,12 @@ def main() -> None:
         default=None,
         help=f"Optional path to a materialized dataset. Example: {DEFAULT_DATASET_PATH}",
     )
+    parser.add_argument(
+        "--output-path",
+        type=str,
+        default=None,
+        help="Optional path for saving the full experiment artifact as JSON.",
+    )
     args = parser.parse_args()
 
     output = run_experiment(
@@ -60,6 +67,8 @@ def main() -> None:
         sample_size=args.sample_size,
         dataset_path=args.dataset_path,
     )
+    if args.output_path:
+        save_experiment_output(output, Path(args.output_path))
     print(json.dumps(output["summary_metrics"], indent=2, sort_keys=True))
     print(json.dumps(output["slice_metrics"], indent=2, sort_keys=True))
     print(json.dumps(output["sample_trajectories"], indent=2, sort_keys=True))

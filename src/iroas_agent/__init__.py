@@ -20,7 +20,13 @@ def _load_project_env() -> None:
 _load_project_env()
 
 from .agent import IROASReActAgent
-from .dashboard import load_experiment_output, results_frame, save_experiment_output
+from .dashboard import (
+    EXPERIMENT_OUTPUTS_DIR,
+    load_experiment_output,
+    load_or_create_experiment_output,
+    results_frame,
+    save_experiment_output,
+)
 from .data import DEFAULT_DATASET_PATH, generate_campaigns, load_campaign_dataset, write_campaign_dataset
 from .runner import run_experiment
 from .studio import studio_graph
@@ -28,9 +34,11 @@ from .studio import studio_graph
 __all__ = [
     "IROASReActAgent",
     "DEFAULT_DATASET_PATH",
+    "EXPERIMENT_OUTPUTS_DIR",
     "generate_campaigns",
     "load_campaign_dataset",
     "load_experiment_output",
+    "load_or_create_experiment_output",
     "results_frame",
     "save_experiment_output",
     "write_campaign_dataset",

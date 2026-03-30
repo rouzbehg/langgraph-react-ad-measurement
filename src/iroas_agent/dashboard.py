@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Callable, Dict, Iterable, List
 
 import pandas as pd
+
+EXPERIMENT_OUTPUTS_DIR = Path("data/experiment_outputs")
 
 
 def save_experiment_output(output: Dict[str, Any], output_path: Path) -> Path:
@@ -15,6 +17,18 @@ def save_experiment_output(output: Dict[str, Any], output_path: Path) -> Path:
 
 def load_experiment_output(input_path: Path) -> Dict[str, Any]:
     return json.loads(input_path.read_text(encoding="utf-8"))
+
+
+def load_or_create_experiment_output(
+    output_path: Path,
+    build_output: Callable[[], Dict[str, Any]],
+    refresh: bool = False,
+) -> Dict[str, Any]:
+    if output_path.exists() and not refresh:
+        return load_experiment_output(output_path)
+    output = build_output()
+    save_experiment_output(output, output_path)
+    return output
 
 
 def results_frame(results: Iterable[Dict[str, Any]]) -> pd.DataFrame:
