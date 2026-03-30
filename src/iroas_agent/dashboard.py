@@ -42,6 +42,11 @@ def results_frame(results: Iterable[Dict[str, Any]]) -> pd.DataFrame:
             for action in tool_actions
             if action in {"rct_estimator_tool", "geo_diff_in_diff_tool", "observational_estimator_tool"}
         ]
+        reported_final_estimator = result.get(
+            "reported_final_estimator_used",
+            result["prediction"]["final_estimator_used"],
+        )
+        actual_final_estimator = estimator_actions[-1] if estimator_actions else result["prediction"]["final_estimator_used"]
         step_count = metadata.get("number_of_steps", len(trajectory))
         rows.append(
             {
@@ -53,12 +58,24 @@ def results_frame(results: Iterable[Dict[str, Any]]) -> pd.DataFrame:
                 "true_iROAS": metadata["true_iROAS"],
                 "error": result["prediction"]["estimated_iROAS"] - metadata["true_iROAS"],
                 "abs_error": abs(result["prediction"]["estimated_iROAS"] - metadata["true_iROAS"]),
-                "final_estimator_used": result["prediction"]["final_estimator_used"],
+                "final_estimator_used": actual_final_estimator,
+                "reported_final_estimator_used": reported_final_estimator,
+                "final_estimator_source": (
+                    result.get("final_estimator_source", "trajectory")
+                    if estimator_actions
+                    else result.get("final_estimator_source", "model_explanation")
+                ),
                 "step_count": step_count,
                 "tool_sequence": " -> ".join(tool_actions),
                 "estimator_sequence": " -> ".join(estimator_actions),
+                "last_estimator_in_trajectory": estimator_actions[-1] if estimator_actions else None,
                 "first_action": trajectory[0]["action"] if trajectory else None,
                 "used_multiple_estimators": len(set(estimator_actions)) > 1,
+                "estimator_label_matches_trajectory": (
+                    reported_final_estimator == estimator_actions[-1]
+                    if estimator_actions
+                    else reported_final_estimator == actual_final_estimator
+                ),
                 "trajectory_length": len(trajectory),
                 "explanation": result["prediction"]["explanation"],
             }

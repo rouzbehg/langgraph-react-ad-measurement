@@ -10,6 +10,7 @@ __pycache__/
 /data/*.csv
 /data/*.json
 /data/*.jsonl
+/notebooks/data/experiment_outputs/
 /dist/
 /build/
 *.egg-info/

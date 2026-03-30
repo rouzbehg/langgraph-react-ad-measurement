@@ -220,6 +220,13 @@ class IROASReActAgent:
             final_estimator_used=best_step["action"],
         )
 
+    def _latest_estimator_action(self, trajectory: List[StepRecord]) -> Optional[str]:
+        for step in reversed(trajectory):
+            action = step["action"]
+            if action in TOOL_REGISTRY and action != "diagnostics_tool" and step.get("observation"):
+                return action
+        return None
+
     @traced(name="iroas_campaign_run", run_type="chain")
     def run_campaign(self, campaign: Campaign) -> Dict[str, Any]:
         metadata = campaign.tracing_metadata()
@@ -245,7 +252,16 @@ class IROASReActAgent:
                 ],
             },
         )
-        final_answer = result["final_answer"]
+        raw_final_answer = result["final_answer"]
+        actual_final_estimator = self._latest_estimator_action(result.get("trajectory", []))
+        final_answer = raw_final_answer
+        if actual_final_estimator and raw_final_answer.final_estimator_used != actual_final_estimator:
+            final_answer = FinalAnswer(
+                estimated_incremental_conversions=raw_final_answer.estimated_incremental_conversions,
+                estimated_iroas=raw_final_answer.estimated_iroas,
+                explanation=raw_final_answer.explanation,
+                final_estimator_used=actual_final_estimator,
+            )
         run_metadata = {
             **metadata,
             "predicted_iROAS": round(final_answer.estimated_iroas, 4),
@@ -260,6 +276,8 @@ class IROASReActAgent:
         return {
             "campaign_id": campaign.observed.campaign_id,
             "prediction": final_answer.to_dict(),
+            "reported_final_estimator_used": raw_final_answer.final_estimator_used,
+            "final_estimator_source": "trajectory" if actual_final_estimator else "model_explanation",
             "trajectory": result["trajectory"],
             "metadata": run_metadata,
             "evidence_log": result.get("evidence_log", []),
