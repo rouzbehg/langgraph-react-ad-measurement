@@ -56,6 +56,14 @@ python -m iroas_agent.runner \
   --output-path data/experiment_outputs/latest.json
 ```
 
+8. Launch the local browser dashboard:
+
+```bash
+streamlit run apps/evals_dashboard.py
+```
+
+The local app reads saved experiment artifacts and, if needed, can regenerate them through the same artifact-first workflow used by the notebook dashboard.
+
 ## Data vs artifacts
 
 This project has two different output concepts:
@@ -107,6 +115,7 @@ If `campaign_id` is omitted, the Studio graph will use the first campaign in the
 - `src/iroas_agent/data.py`: synthetic data generation
 - `src/iroas_agent/materialize.py`: dataset export utility
 - `src/iroas_agent/dashboard.py`: notebook dashboard helpers and artifact loading
+- `apps/evals_dashboard.py`: local browser dashboard built with Streamlit
 - `src/iroas_agent/tools.py`: estimator and diagnostics tools
 - `src/iroas_agent/agent.py`: LangGraph ReAct agent
 - `src/iroas_agent/studio.py`: Studio-friendly graph entrypoint

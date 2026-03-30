@@ -22,6 +22,7 @@ _load_project_env()
 from .agent import IROASReActAgent
 from .dashboard import (
     EXPERIMENT_OUTPUTS_DIR,
+    list_experiment_outputs,
     load_experiment_output,
     load_or_create_experiment_output,
     results_frame,
@@ -36,6 +37,7 @@ __all__ = [
     "DEFAULT_DATASET_PATH",
     "EXPERIMENT_OUTPUTS_DIR",
     "generate_campaigns",
+    "list_experiment_outputs",
     "load_campaign_dataset",
     "load_experiment_output",
     "load_or_create_experiment_output",

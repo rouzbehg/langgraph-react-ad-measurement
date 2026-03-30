@@ -31,6 +31,12 @@ def load_or_create_experiment_output(
     return output
 
 
+def list_experiment_outputs(base_dir: Path = EXPERIMENT_OUTPUTS_DIR) -> List[Path]:
+    if not base_dir.exists():
+        return []
+    return sorted(base_dir.glob("*.json"))
+
+
 def results_frame(results: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     rows: List[Dict[str, Any]] = []
     for result in results:
